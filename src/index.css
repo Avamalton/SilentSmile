@@ -1,0 +1,85 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    --font-mono: 'JetBrains Mono', monospace;
+    --bg-primary: #0B100E;
+    --bg-secondary: #101A15;
+    --bg-card: #142019;
+    --bg-elevated: #192820;
+    --accent-emerald: #10B981;
+    --accent-emerald-muted: #34D399;
+    --accent-emerald-subtle: #064E3B;
+    --text-primary: #F1F5F2;
+    --text-secondary: #A1ADA5;
+    --text-disabled: #647168;
+    --border-subtle: #26372D;
+    --status-negative: #EF6464;
+    --status-warning: #EAB866;
+    --status-info: #60A5FA;
+  }
+
+  body {
+    font-family: var(--font-sans);
+    background-color: #0B100E;
+    color: #F1F5F2;
+  }
+}
+
+.font-mono-nums {
+  font-family: 'JetBrains Mono', monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Emerald Noir Institutional Surface Tokens */
+.glass-panel {
+  background-color: #142019;
+  border: 1px solid #26372D;
+  box-shadow: 0 4px 20px -4px rgba(0, 0, 0, 0.45);
+}
+
+.glass-panel-subtle {
+  background-color: #101A15;
+  border: 1px solid #26372D;
+}
+
+.glass-card {
+  background-color: #142019;
+  border: 1px solid #26372D;
+  box-shadow: 0 2px 12px -2px rgba(0, 0, 0, 0.35);
+}
+
+.glass-dropdown {
+  background-color: #192820;
+  border: 1px solid #26372D;
+  box-shadow: 0 12px 32px -4px rgba(0, 0, 0, 0.65);
+}
+
+.glass-input {
+  background-color: #101A15;
+  border: 1px solid #26372D;
+  color: #F1F5F2;
+}
+
+.glass-input:focus {
+  border-color: #10B981;
+  box-shadow: 0 0 0 1px rgba(16, 185, 129, 0.25);
+  outline: none;
+}
+
+/* Institutional Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #0B100E;
+}
+::-webkit-scrollbar-thumb {
+  background: #26372D;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #364E40;
+}

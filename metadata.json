@@ -1,0 +1,6 @@
+{
+  "name": "SilentSmile Exchange",
+  "description": "A centralized exchange-style spot trading simulator for IDR markets with dark glassmorphism, real-time order books, interactive candlestick charts, and virtual portfolio management.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
