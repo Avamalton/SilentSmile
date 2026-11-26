@@ -401,7 +401,7 @@ export function buildMMOrders(
   const halfSpread = Math.max(tick, Math.round((midPrice * (config.targetSpreadBps / 10000)) / 2));
   const minAmt = pair.minOrderAmount || 0.0001;
   const baseQty = Math.max(minAmt, config.baseAmountPerLevel || minAmt);
-  const levels = Math.max(1, Math.min(30, config.levelsPerSide || config.order_count || 10));
+  const levels = Math.max(1, Math.min(60, config.levelsPerSide || config.order_count || 10));
   const priceDecimals = config.price_decimal !== undefined ? config.price_decimal : pair.priceDecimals;
   const amountDecimals = config.quantity_decimal !== undefined ? config.quantity_decimal : pair.amountDecimals;
   const accountId = config.account_id || 'usr_mm_01';

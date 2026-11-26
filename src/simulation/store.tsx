@@ -307,14 +307,14 @@ export const DEFAULT_PAIR_MM_BOTS: Record<string, PairMMBotConfig> = {
     pair: 'DNA/IDR',
     enabled: true,
     targetSpreadBps: 30,
-    levelsPerSide: 12,
+    levelsPerSide: 50,
     baseAmountPerLevel: 750,
     tickSize: 25,
     frequencySec: 3,
     price_decimal: 0,
     quantity_decimal: 2,
     expire_time: 120,
-    order_count: 12,
+    order_count: 50,
     split_order: true,
     split_range: 1.5,
     buy_min_price_limit: 11000,
@@ -330,14 +330,14 @@ export const DEFAULT_PAIR_MM_BOTS: Record<string, PairMMBotConfig> = {
     pair: 'BTC/IDR',
     enabled: true,
     targetSpreadBps: 20,
-    levelsPerSide: 10,
+    levelsPerSide: 50,
     baseAmountPerLevel: 0.05,
     tickSize: 50000,
     frequencySec: 4,
     price_decimal: 0,
     quantity_decimal: 6,
     expire_time: 180,
-    order_count: 10,
+    order_count: 50,
     split_order: true,
     split_range: 1.0,
     buy_min_price_limit: 1200000000,
@@ -353,14 +353,14 @@ export const DEFAULT_PAIR_MM_BOTS: Record<string, PairMMBotConfig> = {
     pair: 'ETH/IDR',
     enabled: true,
     targetSpreadBps: 25,
-    levelsPerSide: 10,
+    levelsPerSide: 50,
     baseAmountPerLevel: 0.5,
     tickSize: 10000,
     frequencySec: 3,
     price_decimal: 0,
     quantity_decimal: 4,
     expire_time: 150,
-    order_count: 10,
+    order_count: 50,
     split_order: true,
     split_range: 1.2,
     buy_min_price_limit: 45000000,
@@ -376,14 +376,14 @@ export const DEFAULT_PAIR_MM_BOTS: Record<string, PairMMBotConfig> = {
     pair: 'SOL/IDR',
     enabled: true,
     targetSpreadBps: 30,
-    levelsPerSide: 10,
+    levelsPerSide: 50,
     baseAmountPerLevel: 5,
     tickSize: 1000,
     frequencySec: 3,
     price_decimal: 0,
     quantity_decimal: 3,
     expire_time: 120,
-    order_count: 10,
+    order_count: 50,
     split_order: true,
     split_range: 1.5,
     buy_min_price_limit: 2400000,
@@ -399,14 +399,14 @@ export const DEFAULT_PAIR_MM_BOTS: Record<string, PairMMBotConfig> = {
     pair: 'USDT/IDR',
     enabled: true,
     targetSpreadBps: 10,
-    levelsPerSide: 8,
+    levelsPerSide: 50,
     baseAmountPerLevel: 1000,
     tickSize: 5,
     frequencySec: 4,
     price_decimal: 0,
     quantity_decimal: 2,
     expire_time: 300,
-    order_count: 8,
+    order_count: 50,
     split_order: true,
     split_range: 0.5,
     buy_min_price_limit: 15800,
@@ -728,23 +728,30 @@ export function SimulationProvider({ children }: { children: React.ReactNode }) 
       if (saved) {
         const parsed = JSON.parse(saved);
         if (parsed.pairMMBots && typeof parsed.pairMMBots === 'object') {
+          const depthMigrated = localStorage.getItem('silentsmile_depth50_v1_migrated');
           const merged: Record<string, PairMMBotConfig> = { ...DEFAULT_PAIR_MM_BOTS };
           for (const [k, v] of Object.entries(parsed.pairMMBots)) {
             if (v && typeof v === 'object') {
+              const incoming = v as Partial<PairMMBotConfig>;
+              const shouldUpgradeDepth = !depthMigrated && (incoming.levelsPerSide ?? 0) <= 12 && Boolean(DEFAULT_PAIR_MM_BOTS[k]);
               merged[k] = {
                 ...(DEFAULT_PAIR_MM_BOTS[k] || {
                   pair: k,
                   enabled: true,
                   targetSpreadBps: 30,
-                  levelsPerSide: 10,
+                  levelsPerSide: 50,
                   baseAmountPerLevel: 10,
                   tickSize: 25,
                   frequencySec: 3,
                 }),
-                ...(v as Partial<PairMMBotConfig>),
+                ...incoming,
+                ...(shouldUpgradeDepth ? { levelsPerSide: 50, order_count: 50 } : {}),
                 pair: k,
               };
             }
+          }
+          if (!depthMigrated) {
+            localStorage.setItem('silentsmile_depth50_v1_migrated', '1');
           }
           return merged;
         }
@@ -1147,8 +1154,12 @@ export function SimulationProvider({ children }: { children: React.ReactNode }) 
     } catch (e) {}
     const seeded: BookOrder[] = [];
     DEFAULT_MARKETS.forEach((pair) => {
-      const fullCfg = DEFAULT_FULL_MM_CONFIGS[pair.id] || DEFAULT_FULL_MM_CONFIGS['DNA/IDR'];
-      seeded.push(...generateInstitutionalMMQuotes(pair, fullCfg, []));
+      if (pair.isActive && (!pair.tradingAccessStatus || pair.tradingAccessStatus === 'OPEN') && DEFAULT_PAIR_MM_BOTS[pair.id]) {
+        seeded.push(...buildMMOrders(pair, pair.lastPrice, DEFAULT_PAIR_MM_BOTS[pair.id], []));
+      } else {
+        const fullCfg = DEFAULT_FULL_MM_CONFIGS[pair.id] || DEFAULT_FULL_MM_CONFIGS['DNA/IDR'];
+        seeded.push(...generateInstitutionalMMQuotes(pair, fullCfg, []));
+      }
     });
     return seeded;
   });
@@ -1267,9 +1278,9 @@ export function SimulationProvider({ children }: { children: React.ReactNode }) 
 
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Derive Level-2 Real Order Book
+  // Derive Level-2 Real Order Book (supports up to 50 depth levels)
   const orderBook = useMemo(() => {
-    return aggregateOrderBook(restingOrders, activePair.id, currentUser.id, 15);
+    return aggregateOrderBook(restingOrders, activePair.id, currentUser.id, 50);
   }, [restingOrders, activePair.id, currentUser.id]);
 
   // Ref tracking state for timers
@@ -1382,14 +1393,14 @@ export function SimulationProvider({ children }: { children: React.ReactNode }) 
       pair: pairId,
       enabled: pairObj?.isActive ?? true,
       targetSpreadBps: 30,
-      levelsPerSide: 10,
+      levelsPerSide: 50,
       baseAmountPerLevel: defaultAmt,
       tickSize: tick,
       frequencySec: 3,
       price_decimal: pairObj?.priceDecimals ?? 0,
       quantity_decimal: pairObj?.amountDecimals ?? 2,
       expire_time: 180,
-      order_count: 10,
+      order_count: 50,
       buy_min_price_limit: Math.max(tick, Math.floor(lastPrice * 0.5)),
       buy_max_price_limit: Math.max(tick, Math.floor(lastPrice * 0.999)),
       sell_min_price_limit: Math.ceil(lastPrice * 1.001),
@@ -1485,7 +1496,8 @@ export function SimulationProvider({ children }: { children: React.ReactNode }) 
           (o) => o.pair === pair.id && o.isMM && !o.isWall && !o.userId.startsWith('bot_console_')
         );
 
-        const mmBook = aggregateOrderBook(mmOnlyOrders, pair.id, currentUser.id);
+        const targetLevels = Math.min(60, Math.max(4, pairBotCfg.levelsPerSide || 10));
+        const mmBook = aggregateOrderBook(mmOnlyOrders, pair.id, currentUser.id, 60);
         const topBid = mmBook.bids[0]?.price || 0;
         const topAsk = mmBook.asks[mmBook.asks.length - 1]?.price || 0;
         const midDriftPct =
@@ -1494,7 +1506,8 @@ export function SimulationProvider({ children }: { children: React.ReactNode }) 
             : 100;
 
         // Replenish ONLY if MM depth is depleted OR MM mid drifted > 0.35% away from mark price
-        if (mmBook.bids.length < 4 || mmBook.asks.length < 4 || midDriftPct > 0.35) {
+        const minHealthyLevels = Math.max(4, Math.floor(targetLevels * 0.6));
+        if (mmBook.bids.length < minHealthyLevels || mmBook.asks.length < minHealthyLevels || midDriftPct > 0.35) {
           const nonMMResting = unexpiredResting.filter(
             (o) => o.pair === pair.id && !(o.isMM && !o.isWall && !o.userId.startsWith('bot_console_'))
           );
@@ -1563,6 +1576,7 @@ export function SimulationProvider({ children }: { children: React.ReactNode }) 
       if (data.feedHealth) {
         if (data.feedHealth.fxRate) {
           setFxRateConfig(data.feedHealth.fxRate);
+          MMPriceFeedAggregatorService.syncFxRate(data.feedHealth.fxRate);
         }
         setWorkerFeedHealth((prev) => ({
           ...prev,
@@ -1619,7 +1633,10 @@ export function SimulationProvider({ children }: { children: React.ReactNode }) 
                 });
               }
               if (feedHealth) {
-                if (feedHealth.fxRate) setFxRateConfig(feedHealth.fxRate);
+                if (feedHealth.fxRate) {
+                  setFxRateConfig(feedHealth.fxRate);
+                  MMPriceFeedAggregatorService.syncFxRate(feedHealth.fxRate);
+                }
                 setWorkerFeedHealth((prev) => ({
                   ...prev,
                   wsConnected: true,

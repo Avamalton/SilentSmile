@@ -660,7 +660,12 @@ export const MarketMakerConsolePanel: React.FC<{ onSuccessNotice?: (msg: string)
                           {prefix}{p.finalPrice.toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}
                         </td>
                         <td className="py-2.5 px-3 text-[#A1ADA5]">
-                          {prefix}{p.primaryPrice.toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}
+                          <span>
+                            {prefix}{p.primaryPrice.toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}
+                          </span>
+                          {p.primaryProvider === 'coingecko' && (
+                            <span className="ml-1.5 text-[10px] text-[#60A5FA]">(CoinGecko)</span>
+                          )}
                         </td>
                         <td className="py-2.5 px-3 text-[#A1ADA5]">
                           {p.secondaryPrice

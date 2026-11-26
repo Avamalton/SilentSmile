@@ -9,6 +9,7 @@ import { VolumeExecutionV2Service } from '../services/bots/VolumeExecutionV2Serv
 
 export { BinanceWsHandler } from './binanceWsHandler';
 export { BybitWsHandler } from './bybitWsHandler';
+export { CoinGeckoUsdtService } from './coinGeckoUsdtService';
 export { PriceAggregatorWorker } from './priceAggregatorWorker';
 export { MMBotWorker } from './mmBotWorker';
 export { VolumeExecutionV2Service } from '../services/bots/VolumeExecutionV2Service';

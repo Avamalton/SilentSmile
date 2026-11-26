@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import express from 'express';
 import http from 'node:http';
 import path from 'node:path';
@@ -18,6 +19,7 @@ import { WorkerSupervisor } from './workers';
 
 export async function bootstrap() {
   const app = express();
+  app.set('trust proxy', 1);
   const server = http.createServer(app);
   const PORT = Number(process.env.PORT) || 3000;
 
@@ -43,6 +45,16 @@ export async function bootstrap() {
 
   // Initialize and start background Market Maker workers & feed aggregators
   const workerSupervisor = WorkerSupervisor.initialize(dbManager, ledgerService, engineManager);
+  try {
+    const latestFx = dbManager.queryOne<any>('SELECT * FROM fx_rates ORDER BY created_at DESC LIMIT 1');
+    if (latestFx && latestFx.source === 'MANUAL_ADMIN' && Number(latestFx.expires_at) > Date.now()) {
+      workerSupervisor.priceAggregator.setFxRate(
+        Number(latestFx.rate),
+        'MANUAL_ADMIN',
+        String(latestFx.updated_by || 'admin')
+      );
+    }
+  } catch {}
   workerSupervisor.start();
 
   // Setup WebSocket Server for Real-Time Market Data & MM Feeds on /ws only

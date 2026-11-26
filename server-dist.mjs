@@ -1,4 +1,5 @@
 // src/server/app.ts
+import "dotenv/config";
 import express from "express";
 import http from "node:http";
 import path2 from "node:path";
@@ -9291,6 +9292,7 @@ function createApiRouter(dbMgr, authService, ledgerService, engineManager, kycSe
 // src/server/app.ts
 async function bootstrap() {
   const app = express();
+  app.set("trust proxy", 1);
   const server = http.createServer(app);
   const PORT = Number(process.env.PORT) || 3e3;
   app.use(express.json({ limit: "10mb" }));

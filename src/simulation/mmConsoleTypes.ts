@@ -19,8 +19,8 @@ export interface AggregatedReferencePrice {
   bidPrice: number;
   askPrice: number;
   spreadBps: number;
-  primaryProvider: 'binance' | 'bybit' | 'internal' | 'manual';
-  secondaryProvider?: 'binance' | 'bybit' | 'internal' | 'manual';
+  primaryProvider: 'binance' | 'bybit' | 'coingecko' | 'internal' | 'manual';
+  secondaryProvider?: 'binance' | 'bybit' | 'coingecko' | 'internal' | 'manual';
   confidenceScore: number; // 0 - 100%
   status: 'FRESH' | 'STALE' | 'DISPUTED' | 'OUTLIER' | 'DEVIATION_HIGH' | 'INVALID';
   lastUpdated: number;

@@ -39,7 +39,7 @@ export class MMPriceFeedAggregatorService {
       { sym: 'ADAUSDT', binance: 0.88, bybit: 0.879 },
       { sym: 'AVAXUSDT', binance: 38.5, bybit: 38.45 },
       { sym: 'LINKUSDT', binance: 18.2, bybit: 18.18 },
-      { sym: 'USDTIDR', binance: 18250, bybit: 18248 },
+      { sym: 'USDTIDR', binance: 16250, bybit: 16250 },
     ];
 
     for (const item of defaultData) {
@@ -238,6 +238,20 @@ export class MMPriceFeedAggregatorService {
       isStale: false,
     };
 
+    return this.getFxRate();
+  }
+
+  /**
+   * Synchronizes backend FX rate (e.g. CoinGecko fallback or manual admin override)
+   * into the client-side MMPriceFeedAggregatorService cache.
+   */
+  public static syncFxRate(fx: FxRateConfig): FxRateConfig {
+    if (fx && Number.isFinite(fx.usdtIdrRate) && fx.usdtIdrRate > 0) {
+      this.currentFxRate = {
+        ...fx,
+        isStale: Date.now() > fx.expiresAt,
+      };
+    }
     return this.getFxRate();
   }
 

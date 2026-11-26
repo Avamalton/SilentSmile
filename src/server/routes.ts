@@ -1556,14 +1556,38 @@ export function createApiRouter(
     }
   });
 
-  router.get('/mm/fx-rate', (_req: Request, res: Response) => {
+  router.get('/mm/fx-rate', async (_req: Request, res: Response) => {
     try {
+      const now = Date.now();
       const latestFx = dbMgr.queryOne<any>('SELECT * FROM fx_rates ORDER BY created_at DESC LIMIT 1');
-      res.json({
+      if (latestFx && latestFx.source === 'MANUAL_ADMIN' && Number(latestFx.expires_at) > now) {
+        return res.json({
+          success: true,
+          rate: latestFx.rate,
+          source: latestFx.source,
+          expiresAt: latestFx.expires_at,
+        });
+      }
+
+      try {
+        const supervisor = WorkerSupervisor.getInstance();
+        let fx = supervisor.priceAggregator.getFxRate();
+        if (fx.source !== 'COINGECKO_FEED') {
+          fx = await supervisor.priceAggregator.refreshUsdtFromCoinGecko(false);
+        }
+        return res.json({
+          success: true,
+          rate: fx.usdtIdrRate,
+          source: fx.source,
+          expiresAt: fx.expiresAt,
+        });
+      } catch {}
+
+      return res.json({
         success: true,
         rate: latestFx ? latestFx.rate : 16250,
         source: latestFx ? latestFx.source : 'BANK_INDONESIA',
-        expiresAt: latestFx ? latestFx.expires_at : Date.now() + 86400000,
+        expiresAt: latestFx ? latestFx.expires_at : now + 86400000,
       });
     } catch (err: any) {
       res.status(500).json({ success: false, error: err.message });

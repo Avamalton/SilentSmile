@@ -1,17 +1,21 @@
 import { ExternalTicker, AggregatedReferencePrice, FxRateConfig } from '../../simulation/mmConsoleTypes';
 import { BinanceWsHandler } from './binanceWsHandler';
 import { BybitWsHandler } from './bybitWsHandler';
+import { CoinGeckoUsdtService } from './coinGeckoUsdtService';
 
 export type AggregatedPriceCallback = (price: AggregatedReferencePrice) => void;
 export type ClearedAggregatesCallback = (event: { symbols: string[]; provider?: string; timestamp: number }) => void;
 
 export interface PriceAggregatorOptions {
   staleThresholdMs?: number;
+  coinGeckoService?: CoinGeckoUsdtService;
+  coinGeckoPollIntervalMs?: number;
 }
 
 export class PriceAggregatorWorker {
   private binanceHandler: BinanceWsHandler;
   private bybitHandler: BybitWsHandler;
+  private coinGeckoService: CoinGeckoUsdtService;
 
   private latestBinance: Map<string, ExternalTicker> = new Map();
   private latestBybit: Map<string, ExternalTicker> = new Map();
@@ -30,8 +34,10 @@ export class PriceAggregatorWorker {
   };
 
   private aggregationInterval: NodeJS.Timeout | null = null;
+  private coinGeckoInterval: NodeJS.Timeout | null = null;
   private isRunning: boolean = false;
   private readonly staleThresholdMs: number;
+  private readonly coinGeckoPollIntervalMs: number;
   private clearedAggregatesCount: number = 0;
   private lastClearedAt: number | null = null;
 
@@ -42,7 +48,9 @@ export class PriceAggregatorWorker {
   ) {
     this.binanceHandler = binanceHandler || new BinanceWsHandler();
     this.bybitHandler = bybitHandler || new BybitWsHandler();
+    this.coinGeckoService = options?.coinGeckoService || new CoinGeckoUsdtService();
     this.staleThresholdMs = Math.max(100, options?.staleThresholdMs ?? 5000);
+    this.coinGeckoPollIntervalMs = Math.max(5000, options?.coinGeckoPollIntervalMs ?? 60000);
 
     this.binanceHandler.onTicker((ticker) => {
       this.latestBinance.set(ticker.symbol, ticker);
@@ -86,6 +94,12 @@ export class PriceAggregatorWorker {
     this.binanceHandler.start();
     this.bybitHandler.start();
 
+    // Immediately fetch CoinGecko USDT fallback rate and schedule periodic refreshes
+    void this.refreshUsdtFromCoinGecko(true);
+    this.coinGeckoInterval = setInterval(() => {
+      void this.refreshUsdtFromCoinGecko(false);
+    }, this.coinGeckoPollIntervalMs);
+
     // Regular interval to evaluate connection severance, clear stale aggregates, and publish continuous stream
     this.aggregationInterval = setInterval(() => {
       this.recalculateAll();
@@ -98,8 +112,41 @@ export class PriceAggregatorWorker {
       clearInterval(this.aggregationInterval);
       this.aggregationInterval = null;
     }
+    if (this.coinGeckoInterval) {
+      clearInterval(this.coinGeckoInterval);
+      this.coinGeckoInterval = null;
+    }
     this.binanceHandler.stop();
     this.bybitHandler.stop();
+  }
+
+  /**
+   * Fetches latest USDT price from CoinGecko as automatic fallback when Binance/Bybit
+   * lacks direct USDT/IDR quotes and no active manual admin override is configured.
+   */
+  public async refreshUsdtFromCoinGecko(force: boolean = false): Promise<FxRateConfig> {
+    const quote = await this.coinGeckoService.fetchUsdtPrice(force);
+    const now = Date.now();
+
+    if (quote && quote.idrPrice > 0) {
+      const hasActiveManualAdmin =
+        this.fxRate.source === 'MANUAL_ADMIN' && now <= this.fxRate.expiresAt;
+
+      if (!hasActiveManualAdmin) {
+        this.fxRate = {
+          source: 'COINGECKO_FEED',
+          usdtIdrRate: Math.round(quote.idrPrice),
+          lastUpdated: quote.lastUpdated || now,
+          expiresAt: now + 3600000,
+          updatedBy: 'coingecko_fallback',
+          isStale: false,
+        };
+      }
+
+      this.syncUsdtFallbackAggregates(now);
+    }
+
+    return this.getFxRate();
   }
 
   public setFxRate(newRate: number, source: FxRateConfig['source'] = 'MANUAL_ADMIN', updatedBy: string = 'admin') {
@@ -132,6 +179,7 @@ export class PriceAggregatorWorker {
     return {
       binance: this.binanceHandler.getStatus(),
       bybit: this.bybitHandler.getStatus(),
+      coinGecko: this.coinGeckoService.getStatus(),
       activeSymbolsCount: this.aggregatedCache.size,
       fxRate: this.getFxRate(),
       staleThresholdMs: this.staleThresholdMs,
@@ -222,7 +270,13 @@ export class PriceAggregatorWorker {
 
     // Sweep external entries directly from aggregatedCache if still older than maxAgeMs with no live feed
     for (const [sym, agg] of this.aggregatedCache.entries()) {
-      if (agg.primaryProvider === 'internal') continue;
+      if (
+        agg.primaryProvider === 'internal' ||
+        agg.primaryProvider === 'coingecko' ||
+        agg.primaryProvider === 'manual'
+      ) {
+        continue;
+      }
       if (!this.latestBinance.has(sym) && !this.latestBybit.has(sym) && now - agg.lastUpdated > maxAgeMs) {
         affected.add(sym);
       }
@@ -373,6 +427,74 @@ export class PriceAggregatorWorker {
     }
   }
 
+  private syncUsdtFallbackAggregates(now: number = Date.now()) {
+    const cgQuote = this.coinGeckoService.getLatestQuote();
+
+    // Only apply CoinGecko / FX fallback for USDTIDR when Binance/Bybit have no live USDTIDR feed
+    if (!this.latestBinance.has('USDTIDR') && !this.latestBybit.has('USDTIDR')) {
+      const hasActiveManualAdmin =
+        this.fxRate.source === 'MANUAL_ADMIN' && now <= this.fxRate.expiresAt;
+      const isCoinGecko = !hasActiveManualAdmin && (this.fxRate.source === 'COINGECKO_FEED' || Boolean(cgQuote));
+
+      const rate = hasActiveManualAdmin
+        ? this.fxRate.usdtIdrRate
+        : cgQuote
+        ? Math.round(cgQuote.idrPrice)
+        : this.fxRate.usdtIdrRate || 16250;
+
+      const primaryProvider: AggregatedReferencePrice['primaryProvider'] = hasActiveManualAdmin
+        ? 'manual'
+        : isCoinGecko
+        ? 'coingecko'
+        : 'internal';
+
+      const halfSpread = Math.max(1, Math.round(rate * 0.0003));
+      const usdtIdrAgg: AggregatedReferencePrice = {
+        symbol: 'USDTIDR',
+        primaryPrice: rate,
+        finalPrice: rate,
+        bidPrice: rate - halfSpread,
+        askPrice: rate + halfSpread,
+        spreadBps: 6,
+        primaryProvider,
+        confidenceScore: hasActiveManualAdmin ? 99 : isCoinGecko ? 92 : 80,
+        status: this.getFxRate().isStale ? 'STALE' : 'FRESH',
+        lastUpdated: cgQuote?.lastUpdated || this.fxRate.lastUpdated || now,
+        sourceCount: 1,
+      };
+      this.aggregatedCache.set('USDTIDR', usdtIdrAgg);
+      for (const listener of this.listeners) {
+        try {
+          listener(usdtIdrAgg);
+        } catch {}
+      }
+    }
+
+    // Also provide CoinGecko USDT/USD fallback if neither Binance nor Bybit provides USDTUSD
+    if (cgQuote && cgQuote.usdPrice > 0 && !this.latestBinance.has('USDTUSD') && !this.latestBybit.has('USDTUSD')) {
+      const usd = cgQuote.usdPrice;
+      const usdtUsdAgg: AggregatedReferencePrice = {
+        symbol: 'USDTUSD',
+        primaryPrice: usd,
+        finalPrice: usd,
+        bidPrice: Math.round((usd - 0.0003) * 10000) / 10000,
+        askPrice: Math.round((usd + 0.0003) * 10000) / 10000,
+        spreadBps: 6,
+        primaryProvider: 'coingecko',
+        confidenceScore: 92,
+        status: now - cgQuote.fetchedAt > 300000 ? 'STALE' : 'FRESH',
+        lastUpdated: cgQuote.lastUpdated || now,
+        sourceCount: 1,
+      };
+      this.aggregatedCache.set('USDTUSD', usdtUsdAgg);
+      for (const listener of this.listeners) {
+        try {
+          listener(usdtUsdAgg);
+        } catch {}
+      }
+    }
+  }
+
   private recalculateAll() {
     const now = Date.now();
     this.clearStaleAggregates(this.staleThresholdMs, now);
@@ -385,27 +507,6 @@ export class PriceAggregatorWorker {
       this.recalculateSymbol(sym, now);
     }
 
-    // Keep USDTIDR reference price synced to FX rate
-    const rate = this.fxRate.usdtIdrRate || 16250;
-    const usdtIdrAgg: AggregatedReferencePrice = {
-      symbol: 'USDTIDR',
-      primaryPrice: rate,
-      secondaryPrice: rate - 2,
-      finalPrice: rate,
-      bidPrice: rate - 5,
-      askPrice: rate + 5,
-      spreadBps: 6,
-      primaryProvider: 'internal',
-      confidenceScore: 99,
-      status: this.getFxRate().isStale ? 'STALE' : 'FRESH',
-      lastUpdated: now,
-      sourceCount: 1,
-    };
-    this.aggregatedCache.set('USDTIDR', usdtIdrAgg);
-    for (const listener of this.listeners) {
-      try {
-        listener(usdtIdrAgg);
-      } catch {}
-    }
+    this.syncUsdtFallbackAggregates(now);
   }
 }

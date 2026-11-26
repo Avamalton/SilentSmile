@@ -347,6 +347,33 @@ export interface AuditLogEntry {
   timestamp: number;
 }
 
+export type TradingLayoutPreset = 'classic_pro' | 'chart_focus' | 'compact_pro' | 'multi_panel';
+export type TradingWorkspacePanelKey = 'chart' | 'orderBook' | 'recentTrades' | 'orderEntry';
+
+export interface TradingLayoutPanelsVisibility {
+  marketHeader: boolean;
+  chart: boolean;
+  orderBook: boolean;
+  recentTrades: boolean;
+  orderEntry: boolean;
+  bottomPanel: boolean;
+  tickerFooter: boolean;
+}
+
+export interface TradingLayoutPreferences {
+  preset: TradingLayoutPreset;
+  panels: TradingLayoutPanelsVisibility;
+  collapsedPanels: Partial<Record<keyof TradingLayoutPanelsVisibility, boolean>>;
+  panelOrder: TradingWorkspacePanelKey[];
+  orderBookWidthPx: number;
+  recentTradesWidthPx: number;
+  orderEntryWidthPx: number;
+  workspaceHeightPx: number;
+  bottomPanelHeightPx: number;
+  orderBookTradesSplitPct: number;
+  updatedAt?: number;
+}
+
 export interface SimulationSettings {
   engineSpeed: 'normal' | 'fast' | 'slow' | 'paused';
   volatility: 'low' | 'normal' | 'high';
@@ -355,5 +382,6 @@ export interface SimulationSettings {
   chartStyle: 'candlestick' | 'hollow' | 'line';
   showMovingAverages: boolean;
   autoRefreshBook: boolean;
+  tradingLayout?: TradingLayoutPreferences;
+  savedTradingLayout?: TradingLayoutPreferences;
 }
-
